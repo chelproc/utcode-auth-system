@@ -1,0 +1,80 @@
+version: "3"
+services:
+  mysql:
+    image: mysql
+    volumes:
+      - ../data/mysql/storage:/var/lib/mysql
+      - ../data/mysql/log:/var/log/mysql
+      - ./mysql/conf.d:/etc/mysql/conf.d
+      - ./mysql/initdb.d:/docker-entrypoint-initdb.d
+    ports:
+      - 13306:3306
+    environment:
+      MYSQL_ROOT_PASSWORD: root_password
+  smtp:
+    image: namshi/smtp
+  members-api:
+    image: node
+    volumes:
+      - ./members-api/app:/app
+    environment:
+      - BASE_URL=http://localhost:8080/api
+      - CLIENT_BASE_URL=http://localhost:8080
+      - COOKIE_DOMAIN=localhost
+      - DB_TYPE=mysql
+      - DB_HOST=mysql
+      - DB_PORT=3306
+      - DB_USER=members_api
+      - DB_PASSWORD=members_api_password
+      - DB_NAME=user
+    working_dir: /app
+    command: npm run dev
+    #tty: true
+    ports:
+      - 10025:10025
+    depends_on:
+      - mysql
+      - smtp
+  members-client:
+    image: node
+    volumes:
+      - ./members-client/app:/app
+    working_dir: /app
+    command: npm run dev
+    depends_on:
+      - members-api
+  gitea:
+    image: gitea/gitea
+    environment:
+      - USER_UID=1000
+      - USER_GID=1000
+      - DB_TYPE=mysql
+      - DB_HOST=mysql:3306
+      - DB_NAME=gitea
+      - DB_USER=gitea
+      - DB_PASSWD=gitea_password
+    volumes:
+      - ../data/gitea:/data
+    ports:
+      - "10022:22"
+    depends_on:
+      - mysql
+      - smtp
+  wordpress:
+    image: wordpress
+    volumes:
+      - ../data/wordpress:/var/www/html
+  proxy:
+    image: nginx
+    ports:
+      - 8080:8080 # members.utcode.net
+      - 8081:8081 # gitea.members.utcode.net
+      - 8082:8082 # utcode.net
+      - 8083:8083 # blog.members.utcode.net
+    volumes:
+      - ./proxy/conf.d:/etc/nginx/conf.d
+    depends_on:
+      - members-api
+      - members-client
+      - gitea
+      - wordpress
